@@ -76,8 +76,6 @@ jobs:
       - name: Write the release evidence
         env:
           IMAGE: ${{ steps.push.outputs.image }}
-          SMOKE_IMAGE: ${{ steps.push.outputs.image }}
-          SMOKE_OUTCOME: passed
           SMOKE_STARTED_AT: ${{ steps.smoke.outputs.started_at }}
           SMOKE_COMPLETED_AT: ${{ steps.smoke.outputs.completed_at }}
         run: node scripts/release-evidence.mjs release-evidence.json

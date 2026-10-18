@@ -21,12 +21,15 @@ jobs:
         && github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    # The token is an environment secret, readable only by jobs this environment's deployment
+    # branch rule allows (main), not by every workflow in the repository.
+    environment: intake-dispatch
     steps:
       - name: Send app-release.v1 to the platform intake
         env:
-          # A fine-grained token limited to AzScep/deployment-script, with only the access a
-          # repository dispatch needs. It is not the Release App, so nothing it could commit
-          # passes the apply workflow's trust check.
+          # A fine-grained token limited to AzScep/deployment-script. A repository dispatch needs
+          # Contents write, so a leaked token could push to that repository; it is not the Release
+          # App, so it cannot write records the apply workflow trusts. See README, One-time setup.
           GH_TOKEN: ${{ secrets.INTAKE_DISPATCH_TOKEN }}
           RUN_ID: ${{ github.event.workflow_run.id }}
         shell: bash
@@ -34,6 +37,14 @@ jobs:
           set -euo pipefail
           [[ "$RUN_ID" =~ ^[1-9][0-9]*$ ]] || { echo "invalid run id: $RUN_ID" >&2; exit 1; }
           [[ -n "$GH_TOKEN" ]] || { echo 'INTAKE_DISPATCH_TOKEN is not set' >&2; exit 1; }
-          jq -cn --arg runId "$RUN_ID" '{event_type: "app-release.v1", client_payload: {app: "canary", runId: $runId}}' \
-            | gh api --method POST repos/AzScep/deployment-script/dispatches --input -
-          echo "Sent app-release.v1 for run $RUN_ID"
+          payload=$(jq -cn --arg runId "$RUN_ID" '{event_type: "app-release.v1", client_payload: {app: "canary", runId: $runId}}')
+          # Intake treats a repeated dispatch of one run as already accepted, so retrying is safe.
+          for attempt in 1 2 3; do
+            if gh api --method POST repos/AzScep/deployment-script/dispatches --input - <<<"$payload"; then
+              echo "Sent app-release.v1 for run $RUN_ID"
+              exit 0
+            fi
+            echo "dispatch attempt $attempt failed" >&2
+            sleep $((attempt * 10))
+          done
+          exit 1

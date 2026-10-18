@@ -1,8 +1,9 @@
 // Writes release-evidence.json (app-release-evidence.v1) for the platform's intake, which
 // checks it against the canary's contract in AzScep/deployment-script:
 //   node scripts/release-evidence.mjs <output path>
-// Inputs come from the release workflow's environment. It refuses, and writes nothing, unless the
-// smoke gate passed on exactly the image digest this run pushed.
+// Inputs come from the release workflow's environment. The workflow runs this only after the smoke
+// gate exited 0 against the pushed digest, so that step's success is the smoke evidence; this
+// script checks the inputs' shapes and writes nothing when one is wrong.
 import { writeFileSync } from 'node:fs';
 
 const APP = 'canary';
@@ -38,8 +39,6 @@ const sourceRepository = input('GITHUB_REPOSITORY', new RegExp(`^${SOURCE_REPOSI
 const sourceSha = input('GITHUB_SHA', /^[0-9a-f]{40}$/, 'a full commit SHA');
 const buildRunId = input('GITHUB_RUN_ID', /^[1-9][0-9]*$/, 'a run id');
 const image = input('IMAGE', imagePattern, `${IMAGE_REPOSITORY}@sha256:<digest>`);
-if (process.env.SMOKE_IMAGE !== image) refuse('smoke ran on another image than the one this run pushed');
-if (process.env.SMOKE_OUTCOME !== 'passed') refuse('smoke outcome must be passed');
 const startedAt = timestamp('SMOKE_STARTED_AT');
 const completedAt = timestamp('SMOKE_COMPLETED_AT');
 if (new Date(completedAt) < new Date(startedAt)) refuse('smoke completed before it started');

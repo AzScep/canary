@@ -4,6 +4,8 @@
 //   SMOKE_ENVIRONMENT  ci or production
 //   SMOKE_IMAGE        the image digest under test, printed for the run log
 // It exits 0 only when every check passed, 1 when a check failed, and 2 on a usage error.
+// SMOKE_READY_TIMEOUT_MS (default 60000) shortens the wait for the canary in this repo's tests;
+// the platform never sets it.
 // switches.json beside it can fail production smoke on purpose to exercise automatic rollback.
 import { readFileSync } from 'node:fs';
 
@@ -30,7 +32,11 @@ if (!ENVIRONMENTS.includes(environment)) usage(`SMOKE_ENVIRONMENT must be one of
 
 const url = (path) => new URL(path, base).href;
 const failures = [];
-const pass = (name) => console.log(`ok ${name}`);
+let passed = 0;
+const pass = (name) => {
+  passed += 1;
+  console.log(`ok ${name}`);
+};
 const fail = (name, reason) => {
   failures.push(name);
   console.log(`FAIL ${name}: ${reason}`);
@@ -75,7 +81,6 @@ if (switches === null) {
   fail('deliberate production failure', 'failProductionSmoke is on in smoke/switches.json');
 }
 
-const CHECKS = 4;
 if (await waitUntilReachable()) {
   pass('reachable');
 
@@ -105,7 +110,7 @@ if (await waitUntilReachable()) {
   try {
     const response = await get('/');
     const html = await response.text();
-    if (response.status === 200 && html.includes('<dd id="secret">present</dd>') && !html.includes('class="missing"')) {
+    if (response.status === 200 && html.includes('<dd id="setting">') && html.includes('<dd id="secret">present</dd>')) {
       pass('status page');
     } else {
       fail('status page', `the page answered ${response.status} without the delivered config`);
@@ -116,7 +121,7 @@ if (await waitUntilReachable()) {
 }
 
 if (failures.length === 0) {
-  console.log(`smoke passed: ${CHECKS} checks`);
+  console.log(`smoke passed: ${passed} checks`);
 } else {
   console.log(`smoke failed: ${failures.join(', ')}`);
   process.exitCode = 1;

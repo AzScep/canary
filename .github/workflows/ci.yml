@@ -1,7 +1,7 @@
 name: CI
 
 # The smoke gate on every pull request: the unit and smoke-suite tests, then the built image
-# smoked in the same pinned runner the platform uses in production, with and without config.
+# smoked the way the platform's production smoke runs the suite, with and without config.
 on:
   pull_request:
   workflow_dispatch:

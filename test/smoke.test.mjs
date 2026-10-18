@@ -17,8 +17,12 @@ function suiteWithSwitches(content) {
   return { script: path.join(directory, 'smoke.mjs'), remove: () => rmSync(directory, { recursive: true, force: true }) };
 }
 
-test('the committed switch leaves production smoke passing', () => {
-  assert.deepEqual(JSON.parse(readFileSync(path.join(root, 'smoke/switches.json'), 'utf8')), { failProductionSmoke: false });
+// Merging failProductionSmoke: true must leave npm test green, or the release run would fail
+// before intake sees it; so no test depends on the committed value except through these two.
+test('the committed switch file is well formed', () => {
+  const switches = JSON.parse(readFileSync(path.join(root, 'smoke/switches.json'), 'utf8'));
+  assert.deepEqual(Object.keys(switches), ['failProductionSmoke']);
+  assert.equal(typeof switches.failProductionSmoke, 'boolean');
 });
 
 describe('against a configured canary', () => {
@@ -27,13 +31,20 @@ describe('against a configured canary', () => {
   after(() => server.stop());
 
   for (const environment of ['ci', 'production']) {
-    test(`passes in ${environment}`, async () => {
-      const result = await runSmoke(SMOKE, { SMOKE_BASE_URL: server.url, SMOKE_ENVIRONMENT: environment, SMOKE_IMAGE: IMAGE });
+    test(`passes in ${environment} with the switch off`, async (t) => {
+      const suite = suiteWithSwitches('{ "failProductionSmoke": false }\n');
+      t.after(suite.remove);
+      const result = await runSmoke(suite.script, { SMOKE_BASE_URL: server.url, SMOKE_ENVIRONMENT: environment, SMOKE_IMAGE: IMAGE });
       assert.equal(result.code, 0, result.output);
       assert.match(result.output, /smoke passed: 4 checks/);
       assert.match(result.output, new RegExp(`image ${IMAGE.replace(/[.@]/g, '\\$&')}`));
     });
   }
+
+  test('the committed suite passes CI whichever way the switch is set', async () => {
+    const result = await runSmoke(SMOKE, { SMOKE_BASE_URL: server.url, SMOKE_ENVIRONMENT: 'ci', SMOKE_IMAGE: IMAGE });
+    assert.equal(result.code, 0, result.output);
+  });
 
   test('the switch fails production smoke on purpose and leaves CI smoke passing', async (t) => {
     const suite = suiteWithSwitches('{ "failProductionSmoke": true }\n');

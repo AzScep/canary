@@ -70,7 +70,8 @@ const server = http.createServer((request, response) => {
     send(request, response, 405, 'text/plain; charset=utf-8', 'method not allowed\n', { allow: 'GET, HEAD' });
     return;
   }
-  const { pathname } = new URL(request.url, 'http://canary');
+  // Three exact routes need no URL parsing, which would throw on targets such as `//`.
+  const pathname = request.url.split('?', 1)[0];
   if (pathname === '/') {
     send(request, response, 200, 'text/html; charset=utf-8', page(config()), {
       'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",

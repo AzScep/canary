@@ -12,8 +12,6 @@ const valid = {
   GITHUB_SHA: 'c'.repeat(40),
   GITHUB_RUN_ID: '12345678901',
   IMAGE: `ghcr.io/azscep/canary@${DIGEST}`,
-  SMOKE_IMAGE: `ghcr.io/azscep/canary@${DIGEST}`,
-  SMOKE_OUTCOME: 'passed',
   SMOKE_STARTED_AT: '2026-10-18T09:00:00Z',
   SMOKE_COMPLETED_AT: '2026-10-18T09:00:07Z',
 };
@@ -53,10 +51,8 @@ test('writes app-release-evidence.v1 for the pushed digest and its passed smoke 
 });
 
 for (const [name, change, reason] of [
-  ['a smoke that did not pass', { SMOKE_OUTCOME: 'failed' }, /smoke outcome must be passed/],
-  ['smoke on another digest', { SMOKE_IMAGE: `ghcr.io/azscep/canary@sha256:${'d'.repeat(64)}` }, /smoke ran on another image/],
-  ['an image outside the canary repository', { IMAGE: `ghcr.io/azscep/other@${DIGEST}`, SMOKE_IMAGE: `ghcr.io/azscep/other@${DIGEST}` }, /IMAGE must be ghcr\.io\/azscep\/canary@sha256:<digest>/],
-  ['a tag instead of a digest', { IMAGE: 'ghcr.io/azscep/canary:latest', SMOKE_IMAGE: 'ghcr.io/azscep/canary:latest' }, /IMAGE must be ghcr\.io\/azscep\/canary@sha256:<digest>/],
+  ['an image outside the canary repository', { IMAGE: `ghcr.io/azscep/other@${DIGEST}` }, /IMAGE must be ghcr\.io\/azscep\/canary@sha256:<digest>/],
+  ['a tag instead of a digest', { IMAGE: 'ghcr.io/azscep/canary:latest' }, /IMAGE must be ghcr\.io\/azscep\/canary@sha256:<digest>/],
   ['fractional seconds', { SMOKE_STARTED_AT: '2026-10-18T09:00:00.123Z' }, /SMOKE_STARTED_AT must be a UTC time in whole seconds/],
   ['an impossible date', { SMOKE_COMPLETED_AT: '2026-02-30T09:00:00Z' }, /SMOKE_COMPLETED_AT must be a UTC time in whole seconds/],
   ['times out of order', { SMOKE_COMPLETED_AT: '2026-10-18T08:59:59Z' }, /smoke completed before it started/],

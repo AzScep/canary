@@ -12,7 +12,7 @@ The page lists `CANARY_GREETING` with its value and `CANARY_SECRET` as `present`
 
 ## Driving it with curl
 
-- `curl -fsS "$URL/"` contains `<dd id="secret">present</dd>` and no `class="missing"`.
+- `curl -fsS "$URL/"` contains `<dd id="setting">` (no `class="missing"`) and `<dd id="secret">present</dd>`.
 
 ## Gotchas
 

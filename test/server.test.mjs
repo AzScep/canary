@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import net from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import { startServer } from './helpers.mjs';
 
@@ -44,6 +45,21 @@ describe('with its setting and secret', () => {
     const response = await fetch(`${server.url}/healthz`);
     assert.equal(response.status, 200);
     assert.equal(await response.text(), 'ok\n');
+  });
+
+  test('a request target URL cannot parse is a 404 and the server keeps serving', async () => {
+    for (const target of ['//', '//[', 'http://[']) {
+      const reply = await new Promise((resolve, reject) => {
+        const socket = net.connect(new URL(server.url).port, '127.0.0.1');
+        let data = '';
+        socket.on('data', (chunk) => { data += chunk; });
+        socket.on('end', () => resolve(data));
+        socket.on('error', reject);
+        socket.write(`GET ${target} HTTP/1.1\r\nHost: canary\r\nConnection: close\r\n\r\n`);
+      });
+      assert.match(reply, /^HTTP\/1\.1 (400|404) /, target);
+    }
+    assert.equal((await fetch(`${server.url}/healthz`)).status, 200);
   });
 
   test('unknown paths are 404 and other methods are 405', async () => {
