@@ -1,0 +1,90 @@
+name: Release
+
+# The platform's light release path (AzScep/deployment-script, docs/release-records.md): on a
+# push to main, build and push the image, rerun the smoke gate against the exact pushed digest,
+# and upload the release-evidence artifact. notify-intake.yml tells the platform once this run
+# has completed, because intake accepts only a completed, successful run.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out the merged commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up the supported Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Run the server, smoke suite, and evidence tests
+        run: npm test
+
+      - name: Build and push the image, then keep only its digest
+        id: push
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="ghcr.io/azscep/canary:sha-$GITHUB_SHA"
+          docker build --pull \
+            --label org.opencontainers.image.source=https://github.com/AzScep/canary \
+            --label org.opencontainers.image.revision="$GITHUB_SHA" \
+            --tag "$tag" .
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$REGISTRY_USER" --password-stdin
+          docker push "$tag"
+          # Ask the registry which digest it serves for the tag; a local image's RepoDigests can
+          # list other names for it first.
+          digest=$(docker buildx imagetools inspect --format '{{json .Manifest}}' "$tag" | jq -er .digest)
+          image="ghcr.io/azscep/canary@$digest"
+          [[ "$image" =~ ^ghcr\.io/azscep/canary@sha256:[0-9a-f]{64}$ ]] || { echo "unexpected digest reference: $image" >&2; exit 1; }
+          # Smoke what the registry serves, not the local build.
+          docker image rm "$tag" >/dev/null
+          docker pull "$image"
+          docker logout ghcr.io
+          printf 'image=%s\n' "$image" >> "$GITHUB_OUTPUT"
+
+      - name: Rerun the smoke gate against the pushed digest
+        id: smoke
+        env:
+          IMAGE: ${{ steps.push.outputs.image }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          scripts/smoke-container.sh "$IMAGE"
+          completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          {
+            printf 'started_at=%s\n' "$started_at"
+            printf 'completed_at=%s\n' "$completed_at"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Write the release evidence
+        env:
+          IMAGE: ${{ steps.push.outputs.image }}
+          SMOKE_IMAGE: ${{ steps.push.outputs.image }}
+          SMOKE_OUTCOME: passed
+          SMOKE_STARTED_AT: ${{ steps.smoke.outputs.started_at }}
+          SMOKE_COMPLETED_AT: ${{ steps.smoke.outputs.completed_at }}
+        run: node scripts/release-evidence.mjs release-evidence.json
+
+      - name: Upload the release evidence for intake
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-evidence
+          path: release-evidence.json
+          if-no-files-found: error

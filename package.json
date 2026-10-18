@@ -1,0 +1,13 @@
+{
+  "name": "canary",
+  "private": true,
+  "description": "The platform's permanent test app: one web container with one setting and one secret.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test 'test/*.test.mjs'"
+  }
+}

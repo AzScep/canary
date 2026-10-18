@@ -1,0 +1,50 @@
+name: CI
+
+# The smoke gate on every pull request: the unit and smoke-suite tests, then the built image
+# smoked in the same pinned runner the platform uses in production, with and without config.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the change
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up the supported Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Run the server, smoke suite, and evidence tests
+        run: npm test
+
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the change
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Build the image
+        run: docker build --pull --tag canary:ci .
+
+      - name: Run the smoke gate against the image with its setting and secret
+        run: scripts/smoke-container.sh canary:ci
+
+      - name: Prove the smoke gate fails without the setting and secret
+        run: scripts/smoke-container.sh canary:ci --without-config

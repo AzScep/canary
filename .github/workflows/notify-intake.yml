@@ -1,0 +1,39 @@
+name: Notify intake
+
+# Sends app-release.v1 to AzScep/deployment-script once a release run on main has completed
+# successfully. The payload names only the app and the run; intake reads everything else back
+# from this repository with its own read-only token. Runs from the default branch's copy of this
+# file, so a pull request cannot change it.
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  notify:
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.event == 'push'
+        && github.event.workflow_run.path == '.github/workflows/release.yml'
+        && github.event.workflow_run.head_repository.full_name == 'AzScep/canary'
+        && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Send app-release.v1 to the platform intake
+        env:
+          # A fine-grained token limited to AzScep/deployment-script, with only the access a
+          # repository dispatch needs. It is not the Release App, so nothing it could commit
+          # passes the apply workflow's trust check.
+          GH_TOKEN: ${{ secrets.INTAKE_DISPATCH_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RUN_ID" =~ ^[1-9][0-9]*$ ]] || { echo "invalid run id: $RUN_ID" >&2; exit 1; }
+          [[ -n "$GH_TOKEN" ]] || { echo 'INTAKE_DISPATCH_TOKEN is not set' >&2; exit 1; }
+          jq -cn --arg runId "$RUN_ID" '{event_type: "app-release.v1", client_payload: {app: "canary", runId: $runId}}' \
+            | gh api --method POST repos/AzScep/deployment-script/dispatches --input -
+          echo "Sent app-release.v1 for run $RUN_ID"
