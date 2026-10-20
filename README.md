@@ -46,7 +46,7 @@ The platform's side, including how the canary is deployed and configured, lives 
 - `INTAKE_DISPATCH_TOKEN` is a fine-grained personal access token whose only repository is `AzScep/deployment-script`, with Contents read and write, which GitHub requires for a repository dispatch.
   It is deliberately not the Release App, so it cannot write records the apply workflow trusts.
   It can still push to `AzScep/deployment-script`, including `main`, which that repository cannot protect on its current plan, and workflows on `main` hold the Komodo deploy key; treat it as a production credential, give it a short expiry, and revoke it if this repository's secrets may have leaked.
-- After the first release, make the `canary` package on ghcr.io pullable by the server: public, or readable with the server's registry credential.
+- The `canary` package on ghcr.io is public, so the server pulls it without a registry credential.
 
 ## Development
 
