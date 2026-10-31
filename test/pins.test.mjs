@@ -27,3 +27,13 @@ test('the evidence names the suite the platform runs', () => {
   assert.match(read('scripts/release-evidence.mjs'), /const SMOKE_SUITE = 'smoke\/smoke\.mjs';/);
   assert.match(read('scripts/smoke-container.sh'), /node \/suite\/smoke\/smoke\.mjs/);
 });
+
+// The platform's secrets-set readiness check reads .env.example's names; without them it would see
+// no secret to require and pass without checking CANARY_SECRET.
+test('.env.example names exactly the setting and the secret the server reads', () => {
+  const server = read('src/server.mjs');
+  const names = [...server.matchAll(/^const (?:SETTING|SECRET) = '([A-Z_]+)';$/gm)].map(([, name]) => name).sort();
+  const example = read('.env.example').split('\n').filter((line) => /^[A-Z_]+=/.test(line)).map((line) => line.split('=')[0]).sort();
+  assert.deepEqual(names, ['CANARY_GREETING', 'CANARY_SECRET']);
+  assert.deepEqual(example, names);
+});
